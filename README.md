@@ -1,4 +1,4 @@
-# Project Title: Professional README Generator
+# Professional README Generator
 
 ## Description
 This README generator application serves as a user-friendly interface to facilitate the creation of concise, professional and well-structured README files effortlessly. It offers an interactive platform where users can input various details about their projects - like project title, description, installation instructions, usage examples, contributing guidelines, testing instructions, etc. All this information is then used to generate a markdown file which serves as a comprehensive guide for other developers to understand and work on your project effortlessly.
