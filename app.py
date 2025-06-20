@@ -5,9 +5,9 @@ from git import Repo
 import tempfile
 import os
 
-st.set_page_config(page_title="Content Generator", layout="centered")
+st.set_page_config(page_title="README Generator", layout="centered")
 
-st.markdown("<b><h2 style='text-align: center;'>Content Generator</h2></b>", unsafe_allow_html=True)
+st.markdown("<b><h2 style='text-align: center;'>README Generator</h2></b>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center;'>Generate a consolidated file from repository or local directory contents</p>", unsafe_allow_html=True)
 
 tab1, tab2 = st.tabs(["GitHub Repository", "Local Directory"])
