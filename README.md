@@ -39,4 +39,8 @@ To test this project, follow these steps:
 
 ## Contact 
 If you have questions about this project, please reach out to the maintainers directly via LinkedIn or send an email at varuntheace@gmail.com.
+<<<<<<< HEAD
 (P.S, This was created by DocDroid 😂)
+=======
+(P.S, This was created by the README Generator 😂)
+>>>>>>> 5312095cccdc5e13552754d5e50d097d46027620
