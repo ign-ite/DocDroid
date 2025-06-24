@@ -1,7 +1,7 @@
-# Project Title: Professional README Generator
+# Project Title: DocDroid
 
 ## Description
-This README generator application serves as a user-friendly interface to facilitate the creation of concise, professional and well-structured README files effortlessly. It offers an interactive platform where users can input various details about their projects - like project title, description, installation instructions, usage examples, contributing guidelines, testing instructions, etc. All this information is then used to generate a markdown file which serves as a comprehensive guide for other developers to understand and work on your project effortlessly.
+DocDroid is a README generator application serves as a user-friendly interface to facilitate the creation of concise, professional and well-structured README files effortlessly. It offers an interactive platform where users can input various details about their projects - like project title, description, installation instructions, usage examples, contributing guidelines, testing instructions, etc. All this information is then used to generate a markdown file which serves as a comprehensive guide for other developers to understand and work on your project effortlessly.
 
 ## Table of Contents
 - [Installation](#installation)
@@ -39,4 +39,4 @@ To test this project, follow these steps:
 
 ## Contact 
 If you have questions about this project, please reach out to the maintainers directly via LinkedIn or send an email at varuntheace@gmail.com.
-(P.S, This was created by the README Generator 😂)
+(P.S, This was created by DocDroid 😂)
