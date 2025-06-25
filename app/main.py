@@ -335,68 +335,41 @@ with tab1:
 with tab2:
     st.markdown("### 📁 Local Directory Configuration")
     
-    # Add directory browser option
-    use_browser = st.checkbox("🗂️ Use Directory Browser", value=True)
+    # Always use directory browser (with built-in manual input)
+    from utils.directory_browser import render_directory_browser, render_project_preview
     
-    selected_path = None
+    selected_path = render_directory_browser()
     
-    if use_browser:
-        # Import the directory browser
-        from utils.directory_browser import render_directory_browser, render_project_preview
-        
-        selected_path = render_directory_browser()
-        
-        # Show project preview if path is selected
-        if selected_path:
-            render_project_preview(selected_path)
-    
-    # Manual path input (always available as fallback)
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        if selected_path:
-            local_path = st.text_input("Selected Directory Path", value=selected_path, disabled=True)
-        else:
-            local_path = st.text_input("Local Directory Path", placeholder="/path/to/your/project")
-    with col2:
-        tone2 = st.selectbox("README Style", options=["Professional", "Fun"], index=0, key="tone_local")
-    
-    # Override with browser selection if available
+    # Show project preview if path is selected
     if selected_path:
-        local_path = selected_path
+        render_project_preview(selected_path)
     
-    if st.button("🚀 Generate README", key="local", type="primary"):
-        if not local_path:
-            st.error("❌ Please select or enter a directory path")
-        elif not os.path.isdir(local_path):
-            st.error("❌ The provided path is not a valid directory")
+    # Tone selector
+    tone2 = st.selectbox("README Style", options=["Professional", "Fun"], index=0, key="tone_local")
+    
+    # Rest of the generation logic...
+    if st.button("🚀 Generate Local README", key="local", type="primary"):
+        if not selected_path:
+            st.error("❌ Please select a local directory")
         else:
-            with st.spinner("📂 Analyzing local directory..."):
+            # Reset PR state when generating new README
+            st.session_state.pr_created = False
+            st.session_state.pr_result = None
+            st.session_state.pr_success = False
+            
+            with st.spinner("🔍 Analyzing local directory..."):
                 try:
-                    summary = summarize_local_directory(local_path)
+                    # Get local directory summary
+                    summary = summarize_local_directory(selected_path)
                     
-                    # Use the enhanced prompt builder
-                    from core.prompt_builder import create_prompt_for_local_directory
-                    project_name = os.path.basename(local_path)
-                    prompt = create_prompt_for_local_directory(summary, tone2, project_name)
+                    # Create prompt for local directory
+                    prompt = create_prompt_for_local_directory(summary, tone2, os.path.basename(selected_path))
                     
-                    with st.spinner("🤖 Generating README with AI..."):
+                    with st.spinner("🤖 Generating README for local directory..."):
                         readme = generate_readme(prompt).strip()
+                        st.session_state.readme_content = readme
                         
-                        st.success("✅ README generated successfully!")
-                        
-                        # Show project info
-                        st.markdown("### 📊 Project Information")
-                        col1, col2, col3 = st.columns(3)
-                        with col1:
-                            st.metric("📁 Project Name", project_name)
-                        with col2:
-                            try:
-                                file_count = len([f for f in os.listdir(local_path) if os.path.isfile(os.path.join(local_path, f))])
-                                st.metric("📄 Files", file_count)
-                            except:
-                                st.metric("📄 Files", "Unknown")
-                        with col3:
-                            st.metric("📂 Location", "Local Directory")
+                        st.success("✅ Local README generated successfully!")
                         
                         # Display the generated README
                         st.markdown("### 📝 Generated README")
@@ -405,25 +378,14 @@ with tab2:
                         st.markdown("### 👀 Preview")
                         st.markdown(readme)
                         
-                        # Download and save options
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            st.download_button(
-                                "📥 Download README.md",
-                                readme,
-                                file_name="README.md",
-                                mime="text/markdown",
-                                type="secondary"
-                            )
-                        with col2:
-                            if st.button("💾 Save to Project Directory", key="save_local"):
-                                try:
-                                    readme_path = os.path.join(local_path, "README.md")
-                                    with open(readme_path, 'w', encoding='utf-8') as f:
-                                        f.write(readme)
-                                    st.success(f"✅ README saved to {readme_path}")
-                                except Exception as e:
-                                    st.error(f"❌ Error saving file: {str(e)}")
+                        # Download button
+                        st.download_button(
+                            "📥 Download README.md",
+                            readme,
+                            file_name="README.md",
+                            mime="text/markdown",
+                            type="secondary"
+                        )
                         
                 except Exception as e:
                     st.error(f"❌ Error: {str(e)}")
@@ -432,6 +394,6 @@ with tab2:
 st.markdown("---")
 st.markdown("""
 <div class="footer-text">
-    <p>Built with ❤️ using Streamlit | Contact: <a href="mailto:varuntheace@gmail.com">varuntheace@gmail.com</a></p>
+    <p>Built with ❤️ by <a href="https://www.linkedin.com/in/varun-kumar-88286a143/">Varunkumar</a> | Contact: <a href="mailto:varuntheace@gmail.com">varuntheace@gmail.com</a></p>
 </div>
 """, unsafe_allow_html=True)
