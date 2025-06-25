@@ -7,7 +7,16 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core.readme_gen import generate_readme
 from core.summary_build import clone_and_summarize, summarize_with_github_api, summarize_local_directory
-from utils.github_utils import push_readme_and_create_pr, validate_github_token
+from core.prompt_builder import create_enhanced_prompt_with_metadata, create_basic_prompt
+from utils.github_utils import (
+    push_readme_and_create_pr, 
+    validate_github_token, 
+    detect_existing_readme, 
+    generate_diff_suggestions, 
+    fetch_repo_metadata
+)
+from utils.directory_browser import render_directory_browser, render_project_preview
+
 
 # Initialize session state for PR functionality
 if 'pr_created' not in st.session_state:
@@ -19,12 +28,11 @@ if 'pr_success' not in st.session_state:
 if 'readme_content' not in st.session_state:
     st.session_state.readme_content = ""
 
-st.set_page_config(page_title="README Generator", layout="centered")
+st.set_page_config(page_title="DocDroid", layout="centered")
 
 # Dark mode adaptive CSS
 st.markdown("""
 <style>
-    /* Main headers that adapt to theme */
     .main-header {
         text-align: center;
         color: var(--text-color);
@@ -41,7 +49,6 @@ st.markdown("""
         margin-bottom: 2rem;
     }
     
-    /* Success box that adapts to theme */
     .success-box {
         background-color: rgba(40, 167, 69, 0.1);
         border: 1px solid rgba(40, 167, 69, 0.3);
@@ -56,7 +63,6 @@ st.markdown("""
         margin-bottom: 10px;
     }
     
-    /* Error box that adapts to theme */
     .error-box {
         background-color: rgba(220, 53, 69, 0.1);
         border: 1px solid rgba(220, 53, 69, 0.3);
@@ -71,7 +77,6 @@ st.markdown("""
         margin-bottom: 10px;
     }
     
-    /* Info box that adapts to theme */
     .info-box {
         background-color: rgba(23, 162, 184, 0.1);
         border: 1px solid rgba(23, 162, 184, 0.3);
@@ -86,7 +91,6 @@ st.markdown("""
         margin-bottom: 10px;
     }
     
-    /* Code styling that works in both themes */
     .info-box code {
         background-color: rgba(108, 117, 125, 0.2);
         padding: 2px 4px;
@@ -95,7 +99,6 @@ st.markdown("""
         color: var(--text-color);
     }
     
-    /* Links that are visible in both themes */
     .info-box a, .success-box a, .error-box a {
         color: #007bff;
         text-decoration: none;
@@ -106,7 +109,6 @@ st.markdown("""
         text-decoration: underline;
     }
     
-    /* Footer styling */
     .footer-text {
         text-align: center;
         color: var(--text-color);
@@ -122,44 +124,11 @@ st.markdown("""
     .footer-text a:hover {
         text-decoration: underline;
     }
-    
-    /* Ensure all text is visible */
-    .stMarkdown, .stText {
-        color: var(--text-color);
-    }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="main-header">🚀 README Generator</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Generate professional README.md files from repository contents</div>', unsafe_allow_html=True)
-
-def create_prompt(summary: str, tone: str) -> str:
-    """Create the prompt for README generation"""
-    return f"""
-### Instruction:
-Write a {"concise, professional" if tone == "Professional" else "fun, quirky, emoji-rich"} and well-structured README file for a software project.
-
-The README should include the following sections:
-1. **Project Title:** A clear and concise name for the project.
-2. **Description:** A brief overview of what the project does, its purpose, and key features.
-3. **Table of Contents:** (if the README is long, include this for easy navigation)
-4. **Installation:** Step-by-step instructions on how to install and set up the project, including prerequisites.
-5. **Usage:** Examples and explanations of how to use the project, including code snippets or command-line instructions.
-6. **Contributing:** Guidelines for how others can contribute to the project.
-7. **Testing:** Instructions on how to run tests.
-8. **Contact:** How users can reach the maintainers. Email: varuntheace@gmail.com, LinkedIn: https://www.linkedin.com/in/varun-kumar-88286a143/
-
-**Requirements:**
-- Use previous README.md to get the project name correct, if it doesn't exist, create an appropriate name.
-- Exclude license information.
-- Use clear headings and markdown formatting.
-- Make the README engaging and easy to understand.
-- Use bullet points, code blocks, and embedded links where appropriate.
-
-{summary}
-
-### Response:
-"""
+st.markdown('<div class="main-header">🚀🧑‍⚕️ DocDroid </div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Generate professional README.md files with AI-powered insights</div>', unsafe_allow_html=True)
 
 def create_pull_request_with_state(repo_url: str, token: str, readme_content: str):
     """Create pull request and store result in session state"""
@@ -196,7 +165,8 @@ with tab1:
         <ul>
             <li>Access private repositories</li>
             <li>Create branches and pull requests automatically</li>
-            <li>No local cloning required</li>
+            <li>Fetch repository metadata for richer READMEs</li>
+            <li>Detect existing README and suggest improvements</li>
         </ul>
         <p><strong>🔐 Required Token Permissions:</strong></p>
         <ul>
@@ -219,20 +189,72 @@ with tab1:
             st.session_state.pr_result = None
             st.session_state.pr_success = False
             
-            with st.spinner("🔍 Analyzing repository..."):
+            with st.spinner("🔍 Analyzing repository and fetching metadata..."):
                 try:
+                    # Fetch repository metadata if using API
+                    metadata = {}
+                    has_existing = False
+                    existing_content = ""
+                    diff_data = None
+                    
+                    if use_api and github_token:
+                        metadata = fetch_repo_metadata(repo_url, github_token)
+                        has_existing, existing_content, _ = detect_existing_readme(repo_url, github_token)
+                    
+                    # Get repository summary
                     if use_api:
                         summary = summarize_with_github_api(repo_url, github_token)
                     else:
                         summary = clone_and_summarize(repo_url)
                     
-                    prompt = create_prompt(summary, tone)
+                    # Create prompt based on available data
+                    if metadata:
+                        prompt = create_enhanced_prompt_with_metadata(
+                            summary, metadata, tone, existing_content if has_existing else ""
+                        )
+                    else:
+                        prompt = create_basic_prompt(summary, tone)
                     
-                    with st.spinner("🤖 Generating README with AI..."):
+                    with st.spinner("🤖 Generating enhanced README with AI..."):
                         readme = generate_readme(prompt).strip()
                         st.session_state.readme_content = readme
                         
-                        st.success("✅ README generated successfully!")
+                        st.success("✅ Enhanced README generated successfully!")
+                        
+                        # Show metadata insights if available
+                        if metadata:
+                            st.markdown("### 📊 Repository Insights")
+                            col1, col2, col3, col4 = st.columns(4)
+                            with col1:
+                                st.metric("⭐ Stars", metadata.get('stars', 0))
+                            with col2:
+                                st.metric("🍴 Forks", metadata.get('forks', 0))
+                            with col3:
+                                st.metric("👀 Watchers", metadata.get('watchers', 0))
+                            with col4:
+                                st.metric("🐛 Issues", metadata.get('open_issues', 0))
+                        
+                        # Show diff if existing README found
+                        if has_existing:
+                            st.markdown("### 📊 Comparison with Existing README")
+                            diff_data = generate_diff_suggestions(existing_content, readme)
+                            
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.info(f"**Similarity:** {diff_data['similarity']:.1%}")
+                            with col2:
+                                st.info(f"**Improvements:** {len(diff_data['improvements'])}")
+                            
+                            if diff_data['improvements']:
+                                st.markdown("**🚀 Detected Improvements:**")
+                                for improvement in diff_data['improvements']:
+                                    st.markdown(f"- {improvement}")
+                            
+                            with st.expander("📋 View Detailed Diff"):
+                                if diff_data['diff']:
+                                    st.code(diff_data['diff'], language='diff')
+                                else:
+                                    st.info("No significant differences detected")
                         
                         # Display the generated README
                         st.markdown("### 📝 Generated README")
@@ -313,41 +335,95 @@ with tab1:
 with tab2:
     st.markdown("### 📁 Local Directory Configuration")
     
+    # Add directory browser option
+    use_browser = st.checkbox("🗂️ Use Directory Browser", value=True)
+    
+    selected_path = None
+    
+    if use_browser:
+        # Import the directory browser
+        from utils.directory_browser import render_directory_browser, render_project_preview
+        
+        selected_path = render_directory_browser()
+        
+        # Show project preview if path is selected
+        if selected_path:
+            render_project_preview(selected_path)
+    
+    # Manual path input (always available as fallback)
     col1, col2 = st.columns([3, 1])
     with col1:
-        local_path = st.text_input("Local Directory Path", placeholder="/path/to/your/project")
+        if selected_path:
+            local_path = st.text_input("Selected Directory Path", value=selected_path, disabled=True)
+        else:
+            local_path = st.text_input("Local Directory Path", placeholder="/path/to/your/project")
     with col2:
         tone2 = st.selectbox("README Style", options=["Professional", "Fun"], index=0, key="tone_local")
     
+    # Override with browser selection if available
+    if selected_path:
+        local_path = selected_path
+    
     if st.button("🚀 Generate README", key="local", type="primary"):
         if not local_path:
-            st.error("❌ Please enter a directory path")
+            st.error("❌ Please select or enter a directory path")
         elif not os.path.isdir(local_path):
             st.error("❌ The provided path is not a valid directory")
         else:
             with st.spinner("📂 Analyzing local directory..."):
                 try:
                     summary = summarize_local_directory(local_path)
-                    prompt = create_prompt(summary, tone2)
+                    
+                    # Use the enhanced prompt builder
+                    from core.prompt_builder import create_prompt_for_local_directory
+                    project_name = os.path.basename(local_path)
+                    prompt = create_prompt_for_local_directory(summary, tone2, project_name)
                     
                     with st.spinner("🤖 Generating README with AI..."):
                         readme = generate_readme(prompt).strip()
                         
                         st.success("✅ README generated successfully!")
                         
+                        # Show project info
+                        st.markdown("### 📊 Project Information")
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("📁 Project Name", project_name)
+                        with col2:
+                            try:
+                                file_count = len([f for f in os.listdir(local_path) if os.path.isfile(os.path.join(local_path, f))])
+                                st.metric("📄 Files", file_count)
+                            except:
+                                st.metric("📄 Files", "Unknown")
+                        with col3:
+                            st.metric("📂 Location", "Local Directory")
+                        
+                        # Display the generated README
                         st.markdown("### 📝 Generated README")
                         st.text_area("", readme, height=400, key="local_text")
                         
                         st.markdown("### 👀 Preview")
                         st.markdown(readme)
                         
-                        st.download_button(
-                            "📥 Download README.md",
-                            readme,
-                            file_name="README.md",
-                            mime="text/markdown",
-                            type="secondary"
-                        )
+                        # Download and save options
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.download_button(
+                                "📥 Download README.md",
+                                readme,
+                                file_name="README.md",
+                                mime="text/markdown",
+                                type="secondary"
+                            )
+                        with col2:
+                            if st.button("💾 Save to Project Directory", key="save_local"):
+                                try:
+                                    readme_path = os.path.join(local_path, "README.md")
+                                    with open(readme_path, 'w', encoding='utf-8') as f:
+                                        f.write(readme)
+                                    st.success(f"✅ README saved to {readme_path}")
+                                except Exception as e:
+                                    st.error(f"❌ Error saving file: {str(e)}")
                         
                 except Exception as e:
                     st.error(f"❌ Error: {str(e)}")
