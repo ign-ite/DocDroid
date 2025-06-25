@@ -2,17 +2,9 @@ import requests
 import base64
 from urllib.parse import urlparse
 
-def push_readme_and_create_pr(repo_url: str, token: str, readme_content: str) -> str:
+def push_readme_and_create_pr(repo_url: str, token: str, readme_content: str) -> tuple[bool, str]:
     """
-    Push a README file to a GitHub repository and create a pull request.
-    
-    Args:
-        repo_url (str): URL of the GitHub repository
-        token (str): GitHub access token
-        readme_content (str): Content of the README file
-        
-    Returns:
-        str: URL of the created pull request, or None if failed
+    Enhanced PR creation with proper error handling and validation.
     """
     try:
         parsed = urlparse(repo_url)
@@ -20,73 +12,120 @@ def push_readme_and_create_pr(repo_url: str, token: str, readme_content: str) ->
         user, repo = path_parts[0], path_parts[1].replace(".git", "")
 
         headers = {
-            "Authorization": f"token {token}",
-            "Accept": "application/vnd.github+json"
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28"
         }
 
         repo_api = f"https://api.github.com/repos/{user}/{repo}"
+        
+        # Validate repository access first
+        repo_response = requests.get(repo_api, headers=headers)
+        if repo_response.status_code != 200:
+            return False, f"Cannot access repository: {repo_response.status_code}"
 
-        # Get default branch
-        repo_data = requests.get(repo_api, headers=headers).json()
+        repo_data = repo_response.json()
         default_branch = repo_data.get("default_branch", "main")
+        
+        # Check if we can write to the repository
+        if not repo_data.get("permissions", {}).get("push", False):
+            return False, "Token lacks push permissions to repository"
 
         # Get latest commit SHA
         ref_url = f"{repo_api}/git/ref/heads/{default_branch}"
-        ref_data = requests.get(ref_url, headers=headers).json()
-        latest_sha = ref_data["object"]["sha"]
+        ref_response = requests.get(ref_url, headers=headers)
+        if ref_response.status_code != 200:
+            return False, f"Cannot get branch reference: {ref_response.status_code}"
+            
+        latest_sha = ref_response.json()["object"]["sha"]
 
+        # Create unique branch name
+        import time
+        branch_name = f"auto-readme-{int(time.time())}"
+        
         # Create new branch
-        branch_name = "auto-readme"
         create_ref_url = f"{repo_api}/git/refs"
-        requests.post(create_ref_url, headers=headers, json={
+        branch_response = requests.post(create_ref_url, headers=headers, json={
             "ref": f"refs/heads/{branch_name}",
             "sha": latest_sha
         })
+        
+        if branch_response.status_code not in [200, 201]:
+            return False, f"Failed to create branch: {branch_response.status_code}"
 
-        # Push README to new branch
-        readme_api = f"https://api.github.com/repos/{user}/{repo}/contents/README.md"
+        # Check if README already exists
+        readme_api = f"{repo_api}/contents/README.md"
+        existing_readme = requests.get(readme_api, headers=headers, params={"ref": default_branch})
+        
         content_b64 = base64.b64encode(readme_content.encode()).decode()
-        requests.put(readme_api, headers=headers, json={
-            "message": "auto: generate README",
+        
+        # Prepare the content payload
+        content_payload = {
+            "message": "docs: auto-generate README",
             "content": content_b64,
             "branch": branch_name
-        })
+        }
+        
+        # If README exists, we need the SHA for updating
+        if existing_readme.status_code == 200:
+            content_payload["sha"] = existing_readme.json()["sha"]
+
+        # Push README to new branch
+        readme_response = requests.put(readme_api, headers=headers, json=content_payload)
+        
+        if readme_response.status_code not in [200, 201]:
+            return False, f"Failed to push README: {readme_response.status_code}"
 
         # Create pull request
-        pr_api = f"https://api.github.com/repos/{user}/{repo}/pulls"
-        pr_resp = requests.post(pr_api, headers=headers, json={
-            "title": "Auto-generated README 📘",
+        pr_api = f"{repo_api}/pulls"
+        pr_payload = {
+            "title": "📘 Auto-generated README",
             "head": branch_name,
             "base": default_branch,
-            "body": "This PR adds an auto-generated `README.md`. Feel free to review and merge."
-        })
-
-        return pr_resp.json().get("html_url", None)
-    
-    except Exception as e:
-        raise Exception(f"Failed to push README and create PR: {str(e)}")
-
-def validate_github_token(token: str, repo_url: str) -> bool:
-    """
-    Validate if a GitHub token has the necessary permissions for a repository.
-    
-    Args:
-        token (str): GitHub access token
-        repo_url (str): URL of the GitHub repository
+            "body": "This PR adds an auto-generated `README.md` file.\n\n**Generated by:** DocDroid\n\nPlease review the content and merge if it looks good!"
+        }
         
-    Returns:
-        bool: True if token is valid and has necessary permissions
+        pr_response = requests.post(pr_api, headers=headers, json=pr_payload)
+        
+        if pr_response.status_code == 201:
+            pr_url = pr_response.json().get("html_url")
+            return True, pr_url
+        else:
+            error_msg = pr_response.json().get("message", "Unknown error")
+            return False, f"Failed to create PR: {error_msg}"
+
+    except Exception as e:
+        return False, f"Error creating PR: {str(e)}"
+
+
+def validate_github_token(token: str, repo_url: str) -> tuple[bool, str]:
+    """
+    Enhanced token validation with detailed error reporting.
     """
     try:
         parsed = urlparse(repo_url)
         path_parts = parsed.path.strip("/").split("/")
         user, repo = path_parts[0], path_parts[1].replace(".git", "")
 
-        headers = {"Authorization": f"token {token}"}
-        repo_api = f"https://api.github.com/repos/{user}/{repo}"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28"
+        }
         
+        repo_api = f"https://api.github.com/repos/{user}/{repo}"
         response = requests.get(repo_api, headers=headers)
-        return response.status_code == 200
-    
-    except Exception:
-        return False
+        
+        if response.status_code == 200:
+            return True, "Token is valid"
+        elif response.status_code == 404:
+            return False, "Repository not found or token lacks access"
+        elif response.status_code == 401:
+            return False, "Invalid token"
+        elif response.status_code == 403:
+            return False, "Token lacks required permissions"
+        else:
+            return False, f"API error: {response.status_code}"
+            
+    except Exception as e:
+        return False, f"Validation error: {str(e)}"
