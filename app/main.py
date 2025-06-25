@@ -347,29 +347,42 @@ with tab2:
     # Tone selector
     tone2 = st.selectbox("README Style", options=["Professional", "Fun"], index=0, key="tone_local")
     
-    # Rest of the generation logic...
-    if st.button("🚀 Generate Local README", key="local", type="primary"):
-        if not selected_path:
-            st.error("❌ Please select a local directory")
+    if st.button("🚀 Generate README", key="local", type="primary"):
+        # Use the selected path from the browser OR from session state
+        final_path = selected_path or st.session_state.get('selected_path', '')
+        
+        if not final_path:
+            st.error("❌ Please select a directory using the browser above")
+        elif not os.path.isdir(final_path):
+            st.error("❌ The selected path is not a valid directory")
         else:
-            # Reset PR state when generating new README
-            st.session_state.pr_created = False
-            st.session_state.pr_result = None
-            st.session_state.pr_success = False
-            
-            with st.spinner("🔍 Analyzing local directory..."):
+            with st.spinner("📂 Analyzing local directory..."):
                 try:
-                    # Get local directory summary
-                    summary = summarize_local_directory(selected_path)
+                    summary = summarize_local_directory(final_path)
                     
-                    # Create prompt for local directory
-                    prompt = create_prompt_for_local_directory(summary, tone2, os.path.basename(selected_path))
+                    # Use the enhanced prompt builder
+                    from core.prompt_builder import create_prompt_for_local_directory
+                    project_name = os.path.basename(final_path)
+                    prompt = create_prompt_for_local_directory(summary, tone2, project_name)
                     
-                    with st.spinner("🤖 Generating README for local directory..."):
+                    with st.spinner("🤖 Generating README with AI..."):
                         readme = generate_readme(prompt).strip()
-                        st.session_state.readme_content = readme
                         
-                        st.success("✅ Local README generated successfully!")
+                        st.success("✅ README generated successfully!")
+                        
+                        # Show project info
+                        st.markdown("### 📊 Project Information")
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("📁 Project Name", project_name)
+                        with col2:
+                            try:
+                                file_count = len([f for f in os.listdir(final_path) if os.path.isfile(os.path.join(final_path, f))])
+                                st.metric("📄 Files", file_count)
+                            except:
+                                st.metric("📄 Files", "Unknown")
+                        with col3:
+                            st.metric("📂 Location", "Local Directory")
                         
                         # Display the generated README
                         st.markdown("### 📝 Generated README")
@@ -378,14 +391,25 @@ with tab2:
                         st.markdown("### 👀 Preview")
                         st.markdown(readme)
                         
-                        # Download button
-                        st.download_button(
-                            "📥 Download README.md",
-                            readme,
-                            file_name="README.md",
-                            mime="text/markdown",
-                            type="secondary"
-                        )
+                        # Download and save options
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.download_button(
+                                "📥 Download README.md",
+                                readme,
+                                file_name="README.md",
+                                mime="text/markdown",
+                                type="secondary"
+                            )
+                        with col2:
+                            if st.button("💾 Save to Project Directory", key="save_local"):
+                                try:
+                                    readme_path = os.path.join(final_path, "README.md")
+                                    with open(readme_path, 'w', encoding='utf-8') as f:
+                                        f.write(readme)
+                                    st.success(f"✅ README saved to {readme_path}")
+                                except Exception as e:
+                                    st.error(f"❌ Error saving file: {str(e)}")
                         
                 except Exception as e:
                     st.error(f"❌ Error: {str(e)}")

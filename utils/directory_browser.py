@@ -95,6 +95,8 @@ def render_directory_browser() -> Optional[str]:
         st.session_state.current_path = str(Path.home())
     if 'selected_path' not in st.session_state:
         st.session_state.selected_path = ""
+    if 'path_confirmed' not in st.session_state:
+        st.session_state.path_confirmed = False
     
     # Quick access buttons
     st.markdown("**🚀 Quick Access:**")
@@ -140,8 +142,8 @@ def render_directory_browser() -> Optional[str]:
             if st.button("✅ Select This Path", key="select_manual"):
                 if os.path.exists(manual_path) and os.path.isdir(manual_path):
                     st.session_state.selected_path = manual_path
+                    st.session_state.path_confirmed = True
                     st.success(f"✅ Selected: {manual_path}")
-                    return manual_path
                 else:
                     st.error("❌ Invalid directory path")
     
@@ -176,8 +178,8 @@ def render_directory_browser() -> Optional[str]:
                         if is_project:
                             if st.button(f"✅ Select", key=f"select_{i}_{j}"):
                                 st.session_state.selected_path = dir_path
+                                st.session_state.path_confirmed = True
                                 st.success(f"✅ Selected: {directory}")
-                                return dir_path
     
     except PermissionError:
         st.error("❌ Permission denied - Cannot access this directory")
@@ -194,10 +196,15 @@ def render_directory_browser() -> Optional[str]:
         with col1:
             if st.button("🔄 Clear Selection", key="clear_selection"):
                 st.session_state.selected_path = ""
+                st.session_state.path_confirmed = False
                 st.rerun()
         with col2:
             if st.button("✅ Use This Path", key="confirm_selection"):
-                return st.session_state.selected_path
+                st.session_state.path_confirmed = True
+    
+    # Return the selected path if confirmed
+    if st.session_state.path_confirmed and st.session_state.selected_path:
+        return st.session_state.selected_path
     
     return None
 
