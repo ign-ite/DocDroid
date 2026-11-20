@@ -1,6 +1,6 @@
 # DocDroid 🤖
 
-A powerful Streamlit application that automatically generates comprehensive README files for your projects by analyzing repository structure and content.
+Streamlit app that generates a README for a GitHub repository or a local folder by analyzing its structure and contents.
 
 ## Description
 
